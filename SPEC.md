@@ -1,6 +1,6 @@
 # ProofScope, first version
 
-What this is: a small standalone tool that checks an explicit list of expected tests against a JUnit XML result. It checks that every expected test ran once. A green total in the XML is not evidence. This is invention round 1, Forge's idea, built by Kiln. The tool is this folder. It imports no game code. This file is the spec, so a copy of this folder stands alone. The quick start is in README.md. The GitHub Actions step in `action.yml` runs the same check and fails the job when the exit code is not 0. It does not use the network.
+What this is: a small standalone tool that checks an explicit list of expected tests against a JUnit XML result. It checks that every expected test ran once. A green total in the XML is not evidence. This is invention round 1, Forge's idea, built by Kiln. The tool is this folder. It imports no game code. This file is the spec, so a copy of this folder stands alone. The quick start is in README.md. The GitHub Actions step in `action.yml` runs the same check and fails the job when the exit code is not 0. It does not use the network. It stays a short composite step and does not call another action. `.github/workflows/tests.yml` runs the full pytest suite on push and on pull request, on Python 3.11, 3.12 and 3.13. The checkout and Python setup in that file are pinned to commits. The sample workflow is still started by hand.
 
 ## What it checks
 

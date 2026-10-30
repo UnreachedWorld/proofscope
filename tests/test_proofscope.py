@@ -756,3 +756,24 @@ def test_the_action_file_does_not_use_the_network():
     assert sample.index("actions/checkout") < sample.index("uses: ./")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "UnreachedWorld/proofscope@main" in readme
+
+
+def test_the_suite_workflow_runs_three_pythons_on_push_and_pull_request():
+    """The suite workflow runs the full pytest file on three Pythons and stays pinned (g33)."""
+    text = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    assert "push:" in text
+    assert "pull_request:" in text
+    assert "3.11" in text
+    assert "3.12" in text
+    assert "3.13" in text
+    assert "python -m pytest" in text
+    assert "tests" in text
+    assert "3d3c42e5aac5ba805825da76410c181273ba90b1" in text
+    assert "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0" in text
+    assert "@main" not in text
+    assert "@v" not in text
+    action = (ROOT / "action.yml").read_text(encoding="utf-8")
+    assert "using: composite" in action
+    assert "actions/" not in action
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "workflow/status/UnreachedWorld/proofscope/tests.yml" in readme
