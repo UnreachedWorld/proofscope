@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320">
+  <title>ProofScope: Every expected test ran. Once.</title>
+  <rect width="1280" height="320" fill="#0f141a"/>
+  <g fill="none" stroke="#3ddc97" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="200" cy="160" r="72"/>
+    <path d="M251 211 L300 260"/>
+    <path d="M168 162 L192 186 L236 136"/>
+  </g>
+  <text x="360" y="160" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="88" font-weight="700" fill="#f2f5f7">ProofScope</text>
+  <text x="364" y="222" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="38" font-weight="400" fill="#9fb0bf">Every expected test ran. Once.</text>
+</svg>

@@ -1,0 +1,14 @@
+name: ProofScope sample
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+      - name: Check the bundled example
+        uses: ./
+        with:
+          expected: examples/expected.txt
+          results: examples/results.xml

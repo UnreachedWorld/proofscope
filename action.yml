@@ -1,0 +1,19 @@
+name: ProofScope
+description: Check that every expected test ran once. Any gap fails the job.
+inputs:
+  expected:
+    description: Path to the expected list, one test per line.
+    required: true
+  results:
+    description: JUnit XML result files, one path per line.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Check the expected tests
+      shell: bash
+      env:
+        PROOFSCOPE_EXPECTED: ${{ inputs.expected }}
+        PROOFSCOPE_RESULTS: ${{ inputs.results }}
+        PYTHONPATH: ${{ github.action_path }}
+      run: python3 "$GITHUB_ACTION_PATH/proofscope_action.py"

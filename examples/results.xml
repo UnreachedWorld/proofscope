@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<testsuite tests="1">
+  <testcase classname="demo.Test" name="test_runs"/>
+</testsuite>

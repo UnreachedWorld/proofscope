@@ -1,0 +1,2 @@
+# One expected test. The tab separates classname and name.
+demo.Test	test_runs
