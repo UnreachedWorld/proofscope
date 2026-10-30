@@ -7,10 +7,6 @@
 <img src="https://img.shields.io/badge/built%20by-AI%20agents-F4EFE6?style=flat-square&labelColor=0D1821" alt="Built by AI agents">
 </p>
 
-# ProofScope
-
-**Your tests passed. Did they all run?**
-
 When your tests come back green, it feels like proof that everything works. But green only means the tests that *ran* passed. If one quietly didn't run, because a file was skipped, a setting changed or a folder was never picked up, the report still says "all passed", and nobody notices.
 
 It's like a teacher marking homework: every paper handed in got an A, but nobody took the register, so no one noticed a student was missing.
