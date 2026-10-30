@@ -600,8 +600,13 @@ def test_the_readme_quick_start_is_the_standalone_repo():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "git clone https://github.com/UnreachedWorld/proofscope" in text
     assert "python3 proofscope.py --expected examples/expected.txt --results examples/results.xml" in text
-    assert (ROOT / "assets" / "banner.svg").is_file()
-    assert (ROOT / "assets" / "gap-report.svg").is_file()
+    assert "UnreachedWorld/proofscope@main" in text
+    assert (ROOT / "assets" / "banner.png").is_file()
+    assert (ROOT / "assets" / "how-it-works.png").is_file()
+    assert (ROOT / "assets" / "gap-report.png").is_file()
+    assert (ROOT / "assets" / "social-preview.png").is_file()
+    assert not (ROOT / "assets" / "banner.svg").exists()
+    assert not (ROOT / "assets" / "gap-report.svg").exists()
 
 
 def test_the_folder_does_not_point_outside_itself():
@@ -744,8 +749,10 @@ def test_the_action_file_does_not_use_the_network():
     assert "curl" not in lowered
     assert "wget" not in lowered
     assert "token" not in lowered
+    assert "github.action_path" in text
+    assert "GITHUB_ACTION_PATH" in text
     sample = (ROOT / ".github" / "workflows" / "proofscope.yml").read_text(encoding="utf-8")
     assert "uses: ./" in sample
     assert sample.index("actions/checkout") < sample.index("uses: ./")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "action.yml" in readme
+    assert "UnreachedWorld/proofscope@main" in readme
