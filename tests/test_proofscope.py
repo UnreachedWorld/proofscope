@@ -756,3 +756,124 @@ def test_the_action_file_does_not_use_the_network():
     assert sample.index("actions/checkout") < sample.index("uses: ./")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "UnreachedWorld/proofscope@main" in readme
+
+
+def test_jest_and_gotestsum_examples_match_their_lists():
+    """Jest and gotestsum example files match their expected lists (g34)."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert 'JEST_JUNIT_CLASSNAME="{classname}" JEST_JUNIT_TITLE="{title}"' in readme
+    assert "gotestsum --junitfile examples/gotestsum-junit.xml" in readme
+    assert "https://github.com/gotestyourself/gotestsum/issues/22" in readme
+    assert "3cf14356a16c7931cfeacd7dfee585527618df3d" not in readme
+    assert "https://github.com/jest-community/jest-junit/blob/master/README.md" in readme
+    assert "job\tTestOne" in (ROOT / "examples/gotestsum-expected.txt").read_text(encoding="utf-8")
+    pairs = (
+        ("examples/jest-expected.txt", "examples/jest-junit.xml"),
+        ("examples/gotestsum-expected.txt", "examples/gotestsum-junit.xml"),
+    )
+    for expected, results in pairs:
+        done = subprocess.run(
+            [
+                sys.executable,
+                str(TOOL),
+                "--expected",
+                str(ROOT / expected),
+                "--results",
+                str(ROOT / results),
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        assert b"proofscope: ok" in done.stdout
+
+
+def test_list_turns_a_pytest_collection_into_an_expected_list():
+    """pytest --collect-only -q becomes one classname and name per test (g35)."""
+    collected = "\n".join([
+        "tests/test_sample.py::test_plain",
+        "",
+        "tests/test_sample.py::TestBox::test_inside",
+        "tests/test_sample.py::Outer::Inner::test_deep",
+        "tests/test_sample.py::test_param[left]",
+        "tests/test_sample.py::test_param[a::b]",
+        "tests/test_sample.py::TestBox::test_inside[a::b]",
+        "6 tests collected in 0.00s",
+        "",
+    ])
+    code, out = proofscope.list_collected(collected)
+    assert code == 0
+    assert out == "\n".join([
+        "tests.test_sample\ttest_plain",
+        "tests.test_sample.TestBox\ttest_inside",
+        "tests.test_sample.Outer.Inner\ttest_deep",
+        "tests.test_sample\ttest_param[left]",
+        "tests.test_sample\ttest_param[a::b]",
+        "tests.test_sample.TestBox\ttest_inside[a::b]",
+        "",
+    ])
+    bad, message = proofscope.list_collected("tests/test_sample.py::test_plain\nERROR collecting tests/bad.py\n")
+    assert bad == 2
+    assert message.startswith("proofscope: input\n")
+    assert "test_plain" not in message
+    empty, empty_message = proofscope.list_collected("\nno tests collected in 0.01s\n")
+    assert empty == 2
+    assert "no tests collected" in empty_message
+    partial, partial_message = proofscope.list_collected("tests/test_sample.py::test_plain\n")
+    assert partial == 2
+    assert "test_plain" not in partial_message
+    failed_footer, failed_message = proofscope.list_collected(
+        "tests/test_sample.py::test_ok\n1 test collected, 1 error in 0.06s\n"
+    )
+    assert failed_footer == 2
+    assert "test_ok" not in failed_message
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "python3 -m pytest --collect-only -q > collected.txt || exit $?" in readme
+    assert "python3 proofscope.py list < collected.txt > expected.txt.new || exit $?" in readme
+    assert "mv expected.txt.new expected.txt" in readme
+    assert "python3 -m pytest --collect-only -q | python3 proofscope.py list > expected.txt" not in readme
+
+
+def test_the_action_is_ready_to_list_and_stays_unpublished():
+    """The action has a name, a description and branding, and the workflow example is pinned (g36)."""
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    assert "name: ProofScope" in text
+    assert "description:" in text
+    assert "icon: check-circle" in text
+    assert "color: green" in text
+    assert "using: composite" in text
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "## Use it in your workflow" in readme
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in readme
+    section = readme.split("## Use it in your workflow", 1)[1].split("## ", 1)[0]
+    assert "@main" not in section
+    assert "@v" not in section
+    assert "local action" in section
+    assert "does not pin this folder" in section
+    assert "ref: COMMIT_OF_THIS_FOLDER" in section
+    assert "Check the repo out at a pinned commit" not in section
+    spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
+    assert "Marketplace" in spec
+    assert "not published" in spec
+
+
+def test_the_suite_workflow_runs_three_pythons_on_push_and_pull_request():
+    """The suite workflow runs the full pytest file on three Pythons and stays pinned (g33)."""
+    text = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    assert "push:" in text
+    assert "pull_request:" in text
+    assert "3.11" in text
+    assert "3.12" in text
+    assert "3.13" in text
+    assert "python -m pytest" in text
+    assert "tests" in text
+    assert "3d3c42e5aac5ba805825da76410c181273ba90b1" in text
+    assert "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0" in text
+    assert "@main" not in text
+    assert "@v" not in text
+    action = (ROOT / "action.yml").read_text(encoding="utf-8")
+    assert "using: composite" in action
+    assert "actions/" not in action
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "workflow/status/UnreachedWorld/proofscope/tests.yml" in readme

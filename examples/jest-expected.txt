@@ -1,0 +1,2 @@
+# classname, a tab, then the test title. Jest example from the jest-junit readme.
+addition positive numbers	should add up

@@ -269,16 +269,86 @@ def check(expected_path, result_paths):
     return (1 if gap else 0), "\n".join(lines) + "\n"
 
 
+def collected_footer(line):
+    """Says whether a line is pytest's collected-tests summary (g35)."""
+    parts = line.split(" ")
+    if len(parts) < 3:
+        return False
+    if not parts[0].isdigit():
+        return False
+    if parts[1] not in ("test", "tests"):
+        return False
+    return parts[2] == "collected"
+
+
+def identity_from_node(line):
+    """Turns one pytest node id into classname, tab, name (g35)."""
+    head, bracket, tail = line.partition("[")
+    if "::" not in head:
+        return None
+    path, sep, rest = head.partition("::")
+    if sep != "::":
+        return None
+    if not path.endswith(".py"):
+        return None
+    if path.startswith("/") or " " in path:
+        return None
+    module = path[:-3].replace("/", ".")
+    if module == "" or module.startswith("."):
+        return None
+    if rest == "":
+        return None
+    pieces = rest.split("::")
+    if any(piece == "" for piece in pieces):
+        return None
+    name = pieces[-1] + bracket + tail
+    classes = pieces[:-1]
+    classname = module
+    if classes:
+        classname = module + "." + ".".join(classes)
+    return classname + "\t" + name
+
+
+def list_collected(text):
+    """Turns pytest --collect-only -q text into an expected list (g35)."""
+    rows = []
+    saw_footer = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line == "":
+            continue
+        if line.startswith("no tests collected"):
+            continue
+        if collected_footer(line):
+            saw_footer = True
+            continue
+        identity = identity_from_node(line)
+        if identity is None:
+            return 2, "proofscope: input\nnot a collected test: " + line + "\n"
+        rows.append(identity)
+    if not saw_footer or not rows:
+        return 2, "proofscope: input\nno tests collected\n"
+    return 0, "\n".join(rows) + "\n"
+
+
 def main(argv=None):
-    """Runs one check from the command line (proofscope)."""
+    """Runs one check, or writes an expected list, from the command line (proofscope, g35)."""
     try:
         sys.stdout.reconfigure(errors="backslashreplace")
     except (AttributeError, OSError):
         pass
+    incoming = sys.argv[1:] if argv is None else list(argv)
+    if incoming[:1] == ["list"]:
+        if len(incoming) != 1:
+            sys.stdout.write("proofscope: input\nlist reads the collected tests on standard input\n")
+            return 2
+        code, report = list_collected(sys.stdin.read())
+        sys.stdout.write(report)
+        return code
     parser = argparse.ArgumentParser(prog="proofscope")
     parser.add_argument("--expected", required=True, action="append")
     parser.add_argument("--results", required=True, action="append")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(incoming)
     if len(args.expected) != 1:
         sys.stdout.write("proofscope: input\none expected list only\n")
         return 2

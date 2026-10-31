@@ -3,6 +3,7 @@
 <p align="center">
 <img src="https://img.shields.io/badge/license-MIT-3DDC97?style=flat-square" alt="MIT licence">
 <img src="https://img.shields.io/badge/python-3-3DDC97?style=flat-square" alt="Python 3">
+<img src="https://img.shields.io/github/actions/workflow/status/UnreachedWorld/proofscope/tests.yml?branch=main&style=flat-square&label=tests" alt="Tests">
 <img src="https://img.shields.io/badge/install-nothing-3DDC97?style=flat-square" alt="Nothing to install">
 <img src="https://img.shields.io/badge/built%20by-AI%20agents-F4EFE6?style=flat-square&labelColor=0D1821" alt="Built by AI agents">
 </p>
@@ -38,6 +39,14 @@ cd proofscope
 python3 proofscope.py --expected examples/expected.txt --results examples/results.xml
 ```
 
+To write the expected list from pytest, keep pytest's own exit status. A failed collection does not replace the expected list:
+
+```
+python3 -m pytest --collect-only -q > collected.txt || exit $?
+python3 proofscope.py list < collected.txt > expected.txt.new || exit $?
+mv expected.txt.new expected.txt
+```
+
 You'll see:
 
 ```
@@ -52,6 +61,30 @@ failed: 0
 
 It reads standard JUnit XML test reports, which many test tools can write.
 
+## Jest and Go
+
+These two samples are the published shapes, copied here so you can see the command and the expected list. Jest and Go were not run on the machine that added them.
+
+Jest, with the classname and title split from example 2 of the jest-junit readme (https://github.com/jest-community/jest-junit/blob/master/README.md):
+
+```
+JEST_JUNIT_CLASSNAME="{classname}" JEST_JUNIT_TITLE="{title}" jest --reporters=jest-junit
+```
+
+```
+python3 proofscope.py --expected examples/jest-expected.txt --results examples/jest-junit.xml
+```
+
+Go, through gotestsum. The sample keeps the first testcase from the report in https://github.com/gotestyourself/gotestsum/issues/22 (`classname="job"`, `name="TestOne"`, time `75.350s`, Go 1.10.3). That report repeats names, so this file does not copy it whole. The suite count is 1, and the suite name there is `MySuite`.
+
+```
+gotestsum --junitfile examples/gotestsum-junit.xml -- ./...
+```
+
+```
+python3 proofscope.py --expected examples/gotestsum-expected.txt --results examples/gotestsum-junit.xml
+```
+
 ## Use it in GitHub Actions
 
 Add one step after your tests run. If anything is missing, extra, doubled, skipped or failed, the job fails.
@@ -65,6 +98,22 @@ Add one step after your tests run. If anything is missing, extra, doubled, skipp
 ```
 
 It doesn't use the network and doesn't read any secrets. There's a sample workflow in `.github/workflows/proofscope.yml`.
+
+## Use it in your workflow
+
+`uses: ./` is a local action. It runs this folder from the repository the workflow checked out, so this folder has to be in that checkout. The checkout line below pins the checkout action (actions/checkout v7.0.1). That pin does not pin this folder. Replace `COMMIT_OF_THIS_FOLDER` with the commit of this folder you trust.
+
+```
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+  with:
+    ref: COMMIT_OF_THIS_FOLDER
+- uses: ./
+  with:
+    expected: examples/expected.txt
+    results: examples/results.xml
+```
+
+This folder is not listed on the Marketplace.
 
 ## How it was made
 

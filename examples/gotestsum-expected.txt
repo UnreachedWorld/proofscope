@@ -1,0 +1,2 @@
+# classname, a tab, then the Go test name. First testcase from gotestsum issue 22.
+job	TestOne
