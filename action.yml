@@ -1,5 +1,8 @@
 name: ProofScope
 description: Check that every expected test ran once. Any gap fails the job.
+branding:
+  icon: check-circle
+  color: green
 inputs:
   expected:
     description: Path to the expected list, one test per line.
