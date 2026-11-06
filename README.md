@@ -8,6 +8,10 @@
 <img src="https://img.shields.io/badge/built%20by-AI%20agents-F4EFE6?style=flat-square&labelColor=0D1821" alt="Built by AI agents">
 </p>
 
+# ProofScope
+
+**Your tests passed. Did they all run?**
+
 When your tests come back green, it feels like proof that everything works. But green only means the tests that *ran* passed. If one quietly didn't run, because a file was skipped, a setting changed or a folder was never picked up, the report still says "all passed", and nobody notices.
 
 It's like a teacher marking homework: every paper handed in got an A, but nobody took the register, so no one noticed a student was missing.
@@ -138,7 +142,7 @@ The exact rules are in [SPEC.md](SPEC.md).
 
 ### The expected list
 
-One test per line: the class name, a tab, then the test name, exactly as they appear in the JUnit XML (parameter suffixes included). Blank lines are ignored. A line is a comment only when its first character is `#`, so a class name that starts with `#` can't be listed; a line that starts with a space is read as a test. A UTF-8 byte order mark at the start of the file is ignored.
+One test per line: the class name, a tab, then the test name, exactly as they appear in the JUnit XML (parameter suffixes included). A line that starts with `skip:`, one space, then that same pair, says this test is expected to be skipped once. If it ran, or never appears, that is a gap. Blank lines are ignored. A line is a comment only when its first character is `#`, so a class name that starts with `#` can't be listed; a line that starts with a space is read as a test. A UTF-8 byte order mark at the start of the file is ignored.
 
 ```
 # shop tests we expect to run
@@ -217,7 +221,7 @@ Here `test_sell` was marked as not run and `test_refund` carried a flaky-failure
 | Code | Meaning |
 |---|---|
 | 0 | Every expected test ran once and succeeded; nothing extra appeared; nothing unsupported. |
-| 1 | A gap: a suite error, totals that disagree with the test cases, a test that isn't one clean run, or something missing, extra, duplicated, skipped or failed. The report names it. |
+| 1 | A gap: a suite error, totals that disagree with the test cases, a test that isn't one clean run, an expected skip that was not skipped once, or something missing, extra, duplicated, skipped or failed. The report names it. |
 | 2 | The inputs couldn't be read: a missing or malformed file, a file that isn't a test suite, a result file that contains a document type, a bad, repeated or empty expected list, more than one expected list, or a result with no test cases and no suite error. |
 
 An empty or broken result is never a pass. Use the exit code in CI:

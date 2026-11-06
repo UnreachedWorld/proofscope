@@ -101,6 +101,83 @@ def test_a_skipped_test_did_not_run(tmp_path):
     assert "missing: 0" in report
 
 
+def test_an_expected_skip_that_is_skipped_once_is_ok(tmp_path):
+    """A declared skip that was skipped once is not a gap (proofscope, a126)."""
+    code, report = run(
+        tmp_path,
+        ["a.A\tb", "skip: a.A\tc"],
+        [case("a.A", "b") + case("a.A", "c", "<skipped/>")],
+    )
+    assert code == 0
+    assert "skipped: 0" in report
+    assert "not-skipped: 0" in report
+
+
+def test_an_expected_skip_that_passed_is_not_ok(tmp_path):
+    """A declared skip that ran and passed is a gap (proofscope, a126)."""
+    code, report = run(tmp_path, ["skip: a.A\tb"], [case("a.A", "b")])
+    assert code == 1
+    assert "not-skipped: 1" in report
+    assert "a.A\tb" in report
+
+
+def test_an_expected_skip_that_is_missing_is_not_ok(tmp_path):
+    """A declared skip that never appears is a gap (proofscope, a126)."""
+    code, report = run(tmp_path, ["a.A\tb", "skip: a.A\tc"], [case("a.A", "b")])
+    assert code == 1
+    assert "not-skipped: 1" in report
+    assert "missing: 0" in report
+
+
+def test_an_expected_skip_counted_twice_is_not_ok(tmp_path):
+    """A declared skip that appears twice is a gap (proofscope, a126)."""
+    body = case("a.A", "b", "<skipped/>") + case("a.A", "b", "<skipped/>")
+    code, report = run(tmp_path, ["skip: a.A\tb"], [body])
+    assert code == 1
+    assert "not-skipped: 1" in report
+    assert "duplicated: 1" in report
+
+
+def test_the_same_name_cannot_be_a_run_and_a_skip(tmp_path):
+    """One identity is not both an expected run and an expected skip (proofscope, a126)."""
+    code, report = run(tmp_path, ["a.A\tb", "skip: a.A\tb"], [case("a.A", "b", "<skipped/>")])
+    assert code == 2
+    assert "duplicate" in report
+
+
+def test_an_expected_skip_with_a_failure_beside_it_is_not_ok(tmp_path):
+    """A skip marker beside a failure is not a clean skip (proofscope, a126)."""
+    code, report = run(
+        tmp_path,
+        ["skip: a.A\tb"],
+        [case("a.A", "b", "<skipped/><failure message='no'/>")],
+    )
+    assert code == 1
+    assert "proofscope: ok" not in report
+
+
+def test_an_expected_skip_with_an_error_beside_it_is_not_ok(tmp_path):
+    """A skip marker beside an error is not a clean skip (proofscope, a126)."""
+    code, report = run(
+        tmp_path,
+        ["skip: a.A\tb"],
+        [case("a.A", "b", "<skipped/><error message='no'/>")],
+    )
+    assert code == 1
+    assert "proofscope: ok" not in report
+
+
+def test_an_expected_skip_with_two_skip_markers_is_not_ok(tmp_path):
+    """Two skip markers on one test are not a clean skip (proofscope, a126)."""
+    code, report = run(
+        tmp_path,
+        ["skip: a.A\tb"],
+        [case("a.A", "b", "<skipped/><skipped/>")],
+    )
+    assert code == 1
+    assert "proofscope: ok" not in report
+
+
 def test_a_failed_test_ran_and_is_not_a_pass(tmp_path):
     """A failure is named failed, and the exit is not zero (proofscope)."""
     code, report = run(tmp_path, ["a.A\tb"], [case("a.A", "b", "<failure message='no'/>")])

@@ -1,9 +1,10 @@
 """ProofScope checks that every expected test ran once.
 
 It reads an expected list and one or more JUnit XML files, then reports missing,
-extra and duplicated tests. A green total in the XML is not evidence. Design:
-SPEC.md in this folder (g25). This file imports no game code and does not use
-the network.
+extra and duplicated tests. A line that starts with skip:, one space, then the
+same pair, names a test that must be skipped once. A green total in the XML is
+not evidence. Design: SPEC.md in this folder (g25, a126). This file imports no
+game code and does not use the network.
 """
 import argparse
 import sys
@@ -48,7 +49,7 @@ def identity_text(identity):
 
 
 def load_expected(path):
-    """Reads the expected identities. A bad or empty list is an input error (proofscope)."""
+    """Reads expected runs and expected skips. A bad or empty list is an input error (proofscope, a126)."""
     try:
         text = Path(path).read_text(encoding="utf-8-sig")
     except UnicodeDecodeError as error:
@@ -56,12 +57,26 @@ def load_expected(path):
     except OSError as error:
         raise ValueError(f"cannot read expected list {path}: {error.strerror}") from error
     seen = []
+    skips = []
     known = set()
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     for line_number, raw in enumerate(text.split("\n"), start=1):
         if raw.strip() == "":
             continue
         if raw.startswith("#"):
+            continue
+        if raw.startswith("skip:"):
+            if not raw.startswith("skip: ") or raw.startswith("skip:  "):
+                raise ValueError(f"expected list {path}:{line_number} is not an expected skip")
+            body = raw[len("skip: "):]
+            parts = body.split("\t")
+            if len(parts) != 2 or parts[0] == "" or parts[1] == "":
+                raise ValueError(f"expected list {path}:{line_number} is not an expected skip")
+            identity = (parts[0], parts[1])
+            if identity in known:
+                raise ValueError(f"expected list has a duplicate: {identity_text(identity)}")
+            known.add(identity)
+            skips.append(identity)
             continue
         parts = raw.split("\t")
         if len(parts) != 2 or parts[0] == "" or parts[1] == "":
@@ -71,9 +86,9 @@ def load_expected(path):
             raise ValueError(f"expected list has a duplicate: {identity_text(identity)}")
         known.add(identity)
         seen.append(identity)
-    if not seen:
+    if not seen and not skips:
         raise ValueError(f"expected list {path} is empty")
-    return seen
+    return seen, skips
 
 
 def parents_of(root):
@@ -124,13 +139,17 @@ def case_unsupported(case, parents):
 
 
 def outcome(case, parents):
-    """Classifies one testcase as passed, skipped, failed or unsupported (proofscope)."""
+    """Classifies one testcase as passed, skipped, failed or unsupported (proofscope, a126)."""
     if case_unsupported(case, parents):
         return "unsupported"
     children = [local_name(child.tag) for child in list(case)]
-    if "skipped" in children:
+    skipped_count = children.count("skipped")
+    failed_count = children.count("failure") + children.count("error")
+    if skipped_count > 1 or (skipped_count == 1 and failed_count > 0):
+        return "unsupported"
+    if skipped_count == 1:
         return "skipped"
-    if "failure" in children or "error" in children:
+    if failed_count > 0:
         return "failed"
     return "passed"
 
@@ -222,20 +241,30 @@ def load_results(paths):
 
 
 def check(expected_path, result_paths):
-    """Compares the expected list with the results and returns an exit code and a report (proofscope)."""
+    """Compares expected runs and skips with the results and returns an exit code and a report (proofscope, a126)."""
     try:
-        expected = load_expected(expected_path)
+        expected, expected_skips = load_expected(expected_path)
         records, unsupported = load_results(result_paths)
     except ValueError as error:
         return 2, "proofscope: input\n" + str(error) + "\n"
     passed = Counter(identity for identity, kind in records if kind == "passed")
-    skipped = sorted({identity for identity, kind in records if kind == "skipped"})
+    skipped = sorted(
+        identity
+        for identity, kind in records
+        if kind == "skipped" and identity not in set(expected_skips)
+    )
     failed = sorted({identity for identity, kind in records if kind == "failed"})
     skipped_set = set(skipped)
     failed_set = set(failed)
     unsupported_ids = {identity for identity, kind in records if kind == "unsupported"}
     observed = Counter(identity for identity, _kind in records)
-    expected_set = set(expected)
+    expected_set = set(expected) | set(expected_skips)
+    not_skipped = []
+    for identity in expected_skips:
+        kinds = [kind for ident, kind in records if ident == identity]
+        if kinds != ["skipped"]:
+            not_skipped.append(identity)
+    not_skipped = sorted(not_skipped)
     missing = sorted(
         identity
         for identity in expected
@@ -251,6 +280,7 @@ def check(expected_path, result_paths):
         ("extra", extra, None),
         ("duplicated", duplicated, observed),
         ("skipped", skipped, None),
+        ("not-skipped", not_skipped, None),
         ("failed", failed, None),
     ]
     unsupported = sorted(unsupported)
