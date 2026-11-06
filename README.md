@@ -216,7 +216,7 @@ Here `test_sell` was marked as not run and `test_refund` carried a flaky-failure
 
 | Code | Meaning |
 |---|---|
-| 0 | Every expected test ran once and succeeded; nothing extra appeared; nothing unsupported. |
+| 0 | Every expected run ran once and succeeded, every expected skip was skipped once, and nothing extra or unsupported appeared. |
 | 1 | A gap: a suite error, totals that disagree with the test cases, a test that isn't one clean run, an expected skip that was not skipped once, or something missing, extra, duplicated, skipped or failed. The report names it. |
 | 2 | The inputs couldn't be read: a missing or malformed file, a file that isn't a test suite, a result file that contains a document type, a bad, repeated or empty expected list, more than one expected list, or a result with no test cases and no suite error. |
 
