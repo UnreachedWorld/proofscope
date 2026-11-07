@@ -687,13 +687,17 @@ def test_the_readme_quick_start_is_the_standalone_repo():
 
 
 def test_the_readme_says_we_use_it_on_ourselves():
-    """The public page names the first zx10 run and not what that run found (g121)."""
+    """The public page names the first zx10 run, the part it did not cover, and not what that run found (g121)."""
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "## Used on ourselves" in text
     assert "129 expected lists" in text
     assert "1,610 tests" in text
     assert "b193b0a" in text
     assert "pull request 303" in text
+    assert "30 inline-check suites" in text
+    assert "the guards" in text
+    assert "payment-AB" in text
+    assert "full test suite" not in text
 
 
 def test_the_folder_does_not_point_outside_itself():

@@ -18,7 +18,7 @@ It's like a teacher marking homework: every paper handed in got an A, but nobody
 
 ## Used on ourselves
 
-We run it on our own work. The first run on zx10's full test suite covered 129 expected lists and 1,610 tests. That run is pull request 303 at commit b193b0a.
+We run it on our own work. The first run on zx10 covered 129 expected lists and 1,610 tests. That is the listed portion of the suite. It did not cover 30 inline-check suites, the guards, or payment-AB. That run is pull request 303 at commit b193b0a.
 
 ## What it catches
 
