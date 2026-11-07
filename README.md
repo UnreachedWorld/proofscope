@@ -16,6 +16,10 @@ It's like a teacher marking homework: every paper handed in got an A, but nobody
 
 <p align="center"><img src="assets/how-it-works.png" alt="Your list has five tests. The report says four passed, all green. ProofScope shows that Refunds work never ran." width="100%"></p>
 
+## Used on ourselves
+
+We run it on our own work. The first run on zx10's full test suite covered 129 expected lists and 1,610 tests. That run is pull request 303 at commit b193b0a.
+
 ## What it catches
 
 | | What it means |
