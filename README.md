@@ -24,7 +24,7 @@ We run it on our own work. The first run on zx10 covered 129 expected lists and 
 
 | | What it means |
 |---|---|
-| **Missing** | On your list, but it never ran. |
+| **Missing** | It's on your list, but the report has no result for it. |
 | **Ran twice** | Counted more than once, so the total looks bigger than it is. |
 | **Skipped** | It was there, but didn't actually run. |
 | **Failed** | It ran and didn't pass. |
@@ -91,7 +91,7 @@ python3 proofscope.py --expected examples/gotestsum-expected.txt --results examp
 
 ## Use it in GitHub Actions
 
-Add one step after your tests run. If anything is missing, extra, doubled, skipped or failed, the job fails.
+Add one step after your tests run. If anything is missing, extra, doubled or failed, or there is an unexpected skip, the job fails.
 
 ```
 - uses: UnreachedWorld/proofscope@main
@@ -175,7 +175,7 @@ failed: 1
 shop.Test	test_tax
 ```
 
-Each problem is listed once, under its own heading. "Missing" means the test never ran at all; a test that was skipped, failed or ran twice is listed under that heading instead.
+Each problem is listed once, under its own heading. “Missing” means “It's on your list, but the report has no result for it.” Skipped, failed and duplicate results have their own headings.
 
 ### Pytest subtest totals
 

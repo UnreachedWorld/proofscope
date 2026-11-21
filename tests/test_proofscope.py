@@ -627,6 +627,8 @@ def test_the_readme_says_the_exit_code_is_the_verdict():
     text = (pathlib.Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
     assert "python3 proofscope.py" in text
     assert "exit code is the verdict" in text
+    assert text.count("It's on your list, but the report has no result for it.") == 2
+    assert "or there is an unexpected skip, the job fails" in text
     hive_spec = "docs" + "/specs/proofscope.md"
     assert hive_spec not in (pathlib.Path(__file__).resolve().parents[1] / "proofscope.py").read_text(encoding="utf-8")
 
