@@ -12,11 +12,17 @@ Each expected line is `classname`, a tab, then `name`. A line that starts with `
 
 The document root must be `testsuite` or `testsuites`. Anything else is an input error.
 
-The tool reads `<testcase>` records only, including ones nested in suites, once each. A suite's `tests` count is not a substitute for those records. When a `testsuite` carries `tests`, `failures`, `errors` or `skipped` and that number does not match its direct testcases, the report says `counts disagree` and the exit is 1. A `failure`, `error` or `skipped` tag, in any letter case, whose parent is not a `testcase`, including one on a `testsuite`, on the `testsuites` wrapper, or nested under properties, is unsupported evidence, even when a testcase in that file passed. The report names that suite error and the exit is 1.
+By default the tool reads `<testcase>` records only, including ones nested in suites, once each. A suite's `tests` count is not a substitute for those records. When a `testsuite` carries `tests`, `failures`, `errors` or `skipped` and that number does not match its direct testcases, the report says `counts disagree` and the exit is 1. A `failure`, `error` or `skipped` tag, in any letter case, whose parent is not a `testcase`, including one on a `testsuite`, on the `testsuites` wrapper, or nested under properties, is unsupported evidence, even when a testcase in that file passed. The report names that suite error and the exit is 1.
 
 A testcase with exactly one `<skipped>` and no `<failure>` or `<error>` was not executed. A `<skipped>` beside a `<failure>` or `<error>`, or more than one `<skipped>`, is unsupported. A testcase with `<failure>` or `<error>` and no `<skipped>` did run, and did not succeed. `system-out`, `system-err` and `properties` may sit beside those markers. Any other direct child is unsupported. A `failure`, `error` or `skipped` nested under something that is not its own testcase is unsupported. A `status` attribute other than `run`, or a `result` attribute other than `completed`, is unsupported. The report names that record and the exit is 1. Any other testcase ran and succeeded. The command takes one `--expected` list. A second one is an input error.
 
 More than one result file is allowed. The same identity in two files counts twice. Passing the same file twice counts twice.
+
+## Opt-in pytest 9 report log (issue #8)
+
+The default JUnit checks remain strict. A count discrepancy lists the header value and the direct testcase count. An unexplained tests difference is GAP.
+
+`--pytest-report-log` accepts pytest-reportlog JSONL from the same invocation as one JUnit file with one suite and direct, uniquely identified, passing parent testcases. The accompanying `proofscope_pytest` plugin stamps each testcase and report event with the same invocation marker and the original pytest node ID. The log must record a single successful pytest 9 session and one passing setup, call and teardown for every distinct stamped JUnit parent. A passing `SubTestReport` counts separately when its invocation marker and original node ID match the JUnit parent and the parent plus message and parameters identifies it uniquely. The number of independently recorded subtests must reconcile the suite's tests total. Other counters and the expected parent list are still checked normally. Unsupported, contradictory, duplicate or nonpassing evidence stays GAP. Use the default checks for merged suites or expected skips. Missing stamps are unsupported evidence and keep GAP. Matching stamps attest only to consistency between supplied artifacts. The caller is responsible for verifying their origin, commit and freshness.
 
 ## The report and the exit
 

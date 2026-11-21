@@ -968,3 +968,174 @@ def test_the_suite_workflow_runs_three_pythons_on_push_and_pull_request():
     assert "actions/" not in action
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "workflow/status/UnreachedWorld/proofscope/tests.yml" in readme
+
+
+SUBTEST_RUN_ID = "b68d6de130d843e6ab2d58e89c4b818c"
+
+
+def subtest_fixture(tmp_path):
+    """Build eight reported tests from six parent records for issue #8."""
+    expected = tmp_path / "expected-subtests.txt"
+    write_expected(expected, [f"test_sample\ttest_{index}" for index in range(6)])
+    result = tmp_path / "subtests.xml"
+    parents = "".join(
+        case("test_sample", f"test_{index}",
+             f'<properties><property name="proofscope_run_id" value="{SUBTEST_RUN_ID}"/>'
+             f'<property name="proofscope_nodeid" value="test_sample.py::test_{index}"/></properties>')
+        for index in range(6)
+    )
+    write_xml(result, f'<testsuite tests="8" failures="0" errors="0" skipped="0">{parents}</testsuite>')
+    return expected, result
+
+
+def write_subtest_log(tmp_path, subtest_outcome="passed", duplicate=False, omit_parent=False,
+                      run_id=SUBTEST_RUN_ID):
+    """Write the report-log event shape used by pytest 9 for issue #8."""
+    import json
+
+    log = tmp_path / "pytest-report.jsonl"
+    rows = [{"$report_type": "SessionStart", "pytest_version": "9.2.0"}]
+    for index in range(5 if omit_parent else 6):
+        nodeid = f"test_sample.py::test_{index}"
+        for phase in ("setup", "call", "teardown"):
+            rows.append({
+                "$report_type": "TestReport", "nodeid": nodeid, "when": phase, "outcome": "passed",
+                "user_properties": [["proofscope_run_id", run_id], ["proofscope_nodeid", nodeid]],
+            })
+    for label in ("first", "first" if duplicate else "second"):
+        rows.append({
+            "$report_type": "SubTestReport", "nodeid": "test_sample.py::test_0",
+            "when": "call", "outcome": subtest_outcome,
+            "_subtest.context": {"msg": label, "kwargs": {}},
+            "user_properties": [["proofscope_run_id", run_id], ["proofscope_nodeid", "test_sample.py::test_0"]],
+        })
+    rows.append({"$report_type": "SessionFinish", "exitstatus": 0})
+    log.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return log
+
+
+def test_subtest_header_gap_explains_the_missing_evidence(tmp_path):
+    """A header alone cannot reconcile subtests (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    code, report = proofscope.check(expected, [result])
+    assert code == 1
+    assert "header tests=8, testcase records=6, unresolved difference=2" in report
+    assert "missing: 0" in report
+
+
+def test_report_log_reconciles_two_passing_subtests(tmp_path):
+    """Distinct subtests from the matching pytest log reconcile the header (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    log = write_subtest_log(tmp_path)
+    run = subprocess.run(
+        [sys.executable, str(TOOL), "--expected", str(expected), "--results", str(result),
+         "--pytest-report-log", str(log)], capture_output=True, text=True,
+    )
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "pytest report log: 6 parent cases, 2 passing subtests" in run.stdout
+    assert "unsupported: 0" in run.stdout
+
+
+def test_log_cannot_override_bad_evidence(tmp_path):
+    """Failed, skipped, duplicate and unmatched log evidence remains GAP (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    for options in ({"subtest_outcome": "failed"}, {"subtest_outcome": "skipped"},
+                    {"duplicate": True}, {"omit_parent": True}):
+        log = write_subtest_log(tmp_path, **options)
+        code, report = proofscope.check(expected, [result], pytest_report_log=log)
+        assert code == 1
+        assert "pytest report log" in report
+        assert "unresolved difference=2" in report
+
+
+def test_report_log_cannot_override_missing_or_duplicate_expected_parent(tmp_path):
+    """A matching log cannot turn an invalid expected parent roster green (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    log = write_subtest_log(tmp_path)
+    with expected.open("a", encoding="utf-8") as f:
+        f.write("test_sample\ttest_missing\n")
+    code, report = proofscope.check(expected, [result], pytest_report_log=log)
+    assert code == 1
+    assert "missing: 1" in report
+    body = '<testsuite tests="9">' + "".join(case("test_sample", f"test_{i}") for i in range(6))
+    body += case("test_sample", "test_0") + "</testsuite>"
+    write_xml(result, body)
+    code, report = proofscope.check(expected, [result], pytest_report_log=log)
+    assert code == 1
+    assert "duplicated: 1" in report
+
+
+def test_invalid_report_event_type_does_not_crash(tmp_path):
+    """An unrecognized event discriminator keeps the report unsupported (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    log = write_subtest_log(tmp_path)
+    source = log.read_text(encoding="utf-8")
+    log.write_text(source.replace('"SubTestReport"', '[]', 1), encoding="utf-8")
+    code, report = proofscope.check(expected, [result], pytest_report_log=log)
+    assert code == 1
+    assert "pytest report log" in report
+    assert "unresolved difference=2" in report
+
+
+def test_passing_subtests_do_not_reconcile_other_suite_counters(tmp_path):
+    """The report log can reconcile the tests total only (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    log = write_subtest_log(tmp_path)
+    source = result.read_text(encoding="utf-8")
+    result.write_text(source.replace('failures="0"', 'failures="1"'), encoding="utf-8")
+    code, report = proofscope.check(expected, [result], pytest_report_log=log)
+    assert code == 1
+    assert "header failures=1, observed failures=0" in report
+
+
+def test_collection_and_unknown_outcomes_are_checked_before_reconciliation(tmp_path):
+    """An opt-in pytest transcript must not hide failed collection or unknown outcomes (issue #8)."""
+    import json
+
+    expected, result = subtest_fixture(tmp_path)
+    for kind, outcome in (("CollectReport", "passed"), ("CollectReport", "failed"),
+                          ("CollectReport", "skipped"), ("OtherTestReport", "passed")):
+        log = write_subtest_log(tmp_path)
+        lines = log.read_text(encoding="utf-8").splitlines()
+        lines.insert(1, json.dumps({"$report_type": kind, "outcome": outcome}))
+        log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        code, report = proofscope.check(expected, [result], pytest_report_log=log)
+        if kind == "CollectReport" and outcome == "passed":
+            assert code == 0
+        else:
+            assert code == 1, (kind, outcome, report)
+            assert "unresolved difference=2" in report
+
+
+def test_report_log_rejects_ambiguous_json_object_members(tmp_path):
+    """Duplicate JSON fields make a report ambiguous (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    log = write_subtest_log(tmp_path)
+    lines = log.read_text(encoding="utf-8").splitlines()
+    lines.insert(1, '{"$report_type": "Metadata", "name": "first", "name": "second"}')
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    code, report = proofscope.check(expected, [result], pytest_report_log=log)
+    assert code == 1
+    assert "duplicate JSON object field" in report
+    assert "unresolved difference=2" in report
+
+
+
+def test_reports_from_separate_invocations_remain_gap(tmp_path):
+    """Matching case names still need the same run marker (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    log = write_subtest_log(tmp_path, run_id="f2c7eb17d29a4f54bfcca7894b2be735")
+    code, report = proofscope.check(expected, [result], pytest_report_log=log)
+    assert code == 1
+    assert "run marker" in report
+
+
+def test_opt_in_requires_original_nodeid_metadata(tmp_path):
+    """The lossy JUnit classname alone does not identify the source node (issue #8)."""
+    expected, result = subtest_fixture(tmp_path)
+    log = write_subtest_log(tmp_path)
+    source = result.read_text(encoding="utf-8")
+    result.write_text(source.replace('name="proofscope_nodeid"', 'name="other_nodeid"', 1), encoding="utf-8")
+    code, report = proofscope.check(expected, [result], pytest_report_log=log)
+    assert code == 1
+    assert "node ID" in report

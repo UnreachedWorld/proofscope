@@ -7,6 +7,7 @@ not evidence. Design: SPEC.md in this folder (g25, a126). This file imports no
 game code and does not use the network.
 """
 import argparse
+import json
 import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -165,10 +166,8 @@ def loose_marker(root, parents):
     return False
 
 
-def counts_disagree(suite):
-    """Says whether a testsuite's own counts do not match its direct testcases (proofscope)."""
-    if local_name(suite.tag) != "testsuite":
-        return False
+def suite_count_gaps(suite, subtests=0):
+    """Explains counters that disagree with the suite records (issue #8)."""
     cases = [child for child in list(suite) if local_name(child.tag) == "testcase"]
     skipped = 0
     errors = 0
@@ -181,11 +180,26 @@ def counts_disagree(suite):
             errors = errors + 1
         elif "failure" in names:
             failures = failures + 1
-    actual = {"tests": len(cases), "failures": failures, "errors": errors, "skipped": skipped}
+    actual = {"tests": len(cases) + subtests, "failures": failures, "errors": errors, "skipped": skipped}
+    gaps = []
     for key, count in actual.items():
-        if key in suite.attrib and suite.attrib[key] != str(count):
-            return True
-    return False
+        header = suite.get(key)
+        if header is None or header == str(count):
+            continue
+        if key == "tests":
+            detail = f"header tests={show_field(header)}, testcase records={len(cases)}"
+            if subtests:
+                detail += f", passing subtests={subtests}"
+            try:
+                difference = int(header) - count
+            except ValueError:
+                detail += ", invalid header count"
+            else:
+                detail += f", unresolved difference={difference}"
+            gaps.append(detail)
+        else:
+            gaps.append(f"header {key}={show_field(header)}, observed {key}={count}")
+    return gaps
 
 
 def document_type(data):
@@ -199,10 +213,128 @@ def document_type(data):
     return False
 
 
-def load_results(paths):
+def unique_json_fields(pairs):
+    """Reject ambiguous JSON object fields, including nested fields (issue #8)."""
+    fields = {}
+    for key, value in pairs:
+        if key in fields:
+            raise ValueError("duplicate JSON object field")
+        fields[key] = value
+    return fields
+
+
+def evidence_properties(pairs):
+    """Read the two unique ProofScope stamps from one case or event (issue #8)."""
+    values = {}
+    for pair in pairs:
+        if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+            raise ValueError("invalid evidence property")
+        name, value = pair
+        if name not in ("proofscope_run_id", "proofscope_nodeid"):
+            continue
+        if name in values or not isinstance(value, str) or not value:
+            raise ValueError("invalid or repeated run marker or node ID")
+        values[name] = value
+    run_id = values.get("proofscope_run_id")
+    node = values.get("proofscope_nodeid")
+    if run_id is None or len(run_id) != 32 or any(char not in "0123456789abcdef" for char in run_id):
+        raise ValueError("missing or invalid run marker")
+    if node is None:
+        raise ValueError("missing original pytest node ID")
+    return run_id, node
+
+
+def pytest_subtest_evidence(path, suite):
+    """Checks a complete pytest 9 report log against one all-passing JUnit suite (issue #8)."""
+    with Path(path).open(encoding="utf-8") as stream:
+        events = [json.loads(line, object_pairs_hook=unique_json_fields) for line in stream]
+    if not events or any(not isinstance(event, dict) for event in events):
+        raise ValueError("expected a JSON-lines object for each event")
+    kinds = [event.get("$report_type") for event in events]
+    version = events[0].get("pytest_version")
+    if (kinds[0] != "SessionStart" or kinds[-1] != "SessionFinish"
+            or kinds.count("SessionStart") != 1 or kinds.count("SessionFinish") != 1
+            or not isinstance(version, str) or not version.startswith("9.")
+            or type(events[-1].get("exitstatus")) is not int or events[-1]["exitstatus"] != 0):
+        raise ValueError("expected one completed, successful pytest 9 session")
+
+    phases = Counter()
+    subtests = set()
+    cases = suite.findall("testcase")
+    identities = Counter((case.get("classname"), case.get("name")) for case in cases)
+    parents = parents_of(suite)
+    if any(count != 1 for count in identities.values()) or any(outcome(case, parents) != "passed" for case in cases):
+        raise ValueError("JUnit parent cases must each pass once")
+    run_ids = set()
+    nodes = set()
+    for case in cases:
+        run_id, node = evidence_properties(
+            (prop.get("name"), prop.get("value")) for prop in case.findall("properties/property")
+        )
+        identity = identity_from_node(node)
+        if identity != f'{case.get("classname")}\t{case.get("name")}' or node in nodes:
+            raise ValueError("JUnit case disagrees with original pytest node ID")
+        run_ids.add(run_id)
+        nodes.add(node)
+    if len(run_ids) != 1:
+        raise ValueError("JUnit must contain one run marker")
+    run_id = next(iter(run_ids))
+    for event in events:
+        kind = event.get("$report_type")
+        if not isinstance(kind, str):
+            raise ValueError("invalid report event type")
+        if kind == "CollectReport":
+            if event.get("outcome") != "passed":
+                raise ValueError("nonpassing collection outcome")
+            continue
+        if kind not in ("TestReport", "SubTestReport"):
+            if "outcome" in event:
+                raise ValueError("unknown outcome-bearing report")
+            continue
+        node = event.get("nodeid")
+        event_properties = event.get("user_properties")
+        if not isinstance(event_properties, list):
+            raise ValueError("missing pytest run marker and node ID properties")
+        marker, source_node = evidence_properties(event_properties)
+        if marker != run_id:
+            raise ValueError("pytest report log run marker differs from JUnit")
+        if source_node != node or source_node not in nodes or event.get("outcome") != "passed":
+            raise ValueError("unmatched test identity or nonpassing outcome")
+        phase = event.get("when")
+        if kind == "TestReport":
+            if phase not in ("setup", "call", "teardown"):
+                raise ValueError("unrecognized parent phase")
+            phases[source_node, phase] += 1
+            continue
+        context = event.get("_subtest.context")
+        if phase != "call" or not isinstance(context, dict):
+            raise ValueError("missing call-phase subtest identity")
+        label = context.get("msg")
+        params = context.get("kwargs")
+        if (label is not None and not isinstance(label, str)) or not isinstance(params, dict):
+            raise ValueError("invalid subtest context")
+        if "msg" not in context or any(not isinstance(value, str) for value in params.values()):
+            raise ValueError("invalid subtest context")
+        subtest = (source_node, label, tuple(sorted(params.items())))
+        if subtest in subtests:
+            raise ValueError("duplicate subtest identity")
+        subtests.add(subtest)
+
+    expected_phases = Counter((node, phase) for node in nodes for phase in ("setup", "call", "teardown"))
+    if phases != expected_phases:
+        raise ValueError("parent phases disagree with JUnit")
+    if not subtests or suite.get("tests") != str(len(cases) + len(subtests)):
+        raise ValueError("subtest outcomes do not reconcile the suite total")
+    return len(subtests)
+
+
+def load_results(paths, pytest_report_log=None):
     """Reads every testcase once from each result file (proofscope)."""
     records = []
     unsupported = []
+    notes = []
+    if pytest_report_log is not None and len(paths) != 1:
+        raise ValueError("pytest report log requires exactly one JUnit result")
     for path in paths:
         file_path = Path(path)
         try:
@@ -221,11 +353,22 @@ def load_results(paths):
         suite_error = loose_marker(root, parents)
         if suite_error:
             unsupported.append(f"suite error in {path}")
-        count_error = any(counts_disagree(element) for element in root.iter())
-        if count_error:
-            unsupported.append(f"counts disagree in {path}")
+        suites = [element for element in root.iter() if local_name(element.tag) == "testsuite"]
         cases = [element for element in root.iter() if local_name(element.tag) == "testcase"]
-        if not cases and not suite_error and not count_error:
+        subtests = 0
+        if pytest_report_log is not None:
+            try:
+                if len(suites) != 1 or len(suites[0].findall("testcase")) != len(cases):
+                    raise ValueError("expected one suite with direct testcase records")
+                subtests = pytest_subtest_evidence(pytest_report_log, suites[0])
+            except (OSError, ValueError) as error:
+                unsupported.append("pytest report log: " + show_field(str(error)))
+            else:
+                notes.append(f"pytest report log: {len(cases)} parent cases, {subtests} passing subtests")
+        gaps = [detail for suite in suites for detail in suite_count_gaps(suite, subtests)]
+        if gaps:
+            unsupported.append(f"counts disagree in {path} (" + "; ".join(gaps) + ")")
+        if not cases and not suite_error and not gaps:
             raise ValueError(f"result {path} has no testcase")
         for case in cases:
             classname = case.attrib.get("classname", "")
@@ -237,14 +380,14 @@ def load_results(paths):
             records.append((identity, kind))
             if kind == "unsupported":
                 unsupported.append("unsupported record " + identity_text(identity))
-    return records, unsupported
+    return records, unsupported, notes
 
 
-def check(expected_path, result_paths):
+def check(expected_path, result_paths, *, pytest_report_log=None):
     """Compares expected runs and skips with the results and returns an exit code and a report (proofscope, a126)."""
     try:
         expected, expected_skips = load_expected(expected_path)
-        records, unsupported = load_results(result_paths)
+        records, unsupported, notes = load_results(result_paths, pytest_report_log)
     except ValueError as error:
         return 2, "proofscope: input\n" + str(error) + "\n"
     passed = Counter(identity for identity, kind in records if kind == "passed")
@@ -285,7 +428,7 @@ def check(expected_path, result_paths):
     ]
     unsupported = sorted(unsupported)
     gap = any(items for _title, items, _counts in sections) or bool(unsupported)
-    lines = ["proofscope: gap" if gap else "proofscope: ok"]
+    lines = ["proofscope: gap" if gap else "proofscope: ok", *notes]
     lines.append(f"unsupported: {len(unsupported)}")
     for item in unsupported:
         lines.append(item)
@@ -378,11 +521,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(prog="proofscope")
     parser.add_argument("--expected", required=True, action="append")
     parser.add_argument("--results", required=True, action="append")
+    parser.add_argument("--pytest-report-log", help="pytest 9 report-log JSONL stamped by proofscope_pytest in the same invocation as JUnit")
     args = parser.parse_args(incoming)
     if len(args.expected) != 1:
         sys.stdout.write("proofscope: input\none expected list only\n")
         return 2
-    code, report = check(args.expected[0], args.results)
+    code, report = check(args.expected[0], args.results, pytest_report_log=args.pytest_report_log)
     sys.stdout.write(report)
     return code
 

@@ -12,7 +12,7 @@ When your tests come back green, it feels like proof that everything works. But 
 
 It's like a teacher marking homework: every paper handed in got an A, but nobody took the register, so no one noticed a student was missing.
 
-**ProofScope takes the register.** You give it the list of tests you expect and your test report. It tells you, in plain words, whether every test on your list really ran, once, and passed.
+**ProofScope takes the register.** You give it the list of tests you expect and your test report. It checks whether the report accounts for every test on your list.
 
 <p align="center"><img src="assets/how-it-works.png" alt="Your list has five tests. The report says four passed, all green. ProofScope shows that Refunds work never ran." width="100%"></p>
 
@@ -131,7 +131,7 @@ The agents that build and test [Unreached](https://unreached.com), a world playe
 
 ## What it doesn't do
 
-ProofScope checks that a result matches your list. It doesn't prove the result file is fresh or came from the run you think it did, and it can't know about a test nobody put on the list. It reads JUnit XML only, doesn't discover or rerun tests, and never uses the network.
+ProofScope checks that a result matches your list. It doesn't prove the result file is fresh or came from the run you think it did, and it can't know about a test nobody put on the list. By default it reads JUnit XML. For pytest 9 subtests it can also read a report log from the test run. The plugin writes the same run label into both files, and ProofScope checks that the labels match. An older matching pair can still pass. Before using the result to approve a release, verify who produced the files, which commit was tested, and which run they came from. ProofScope never discovers or reruns tests and does not use the network.
 
 <details>
 <summary><b>For developers: the full details</b></summary>
@@ -176,6 +176,25 @@ shop.Test	test_tax
 ```
 
 Each problem is listed once, under its own heading. "Missing" means the test never ran at all; a test that was skipped, failed or ran twice is listed under that heading instead.
+
+### Pytest subtest totals
+
+When the JUnit header includes subtests absent from its testcase records, ProofScope reports both counts and the unresolved difference. The verdict stays GAP until the outcomes can be checked.
+
+For a pytest 9 run with one all-passing JUnit suite, install the optional [pytest-reportlog plugin](https://github.com/pytest-dev/pytest-reportlog) in the test environment. Put the ProofScope checkout on the test runner's Python path and load the included stamping plugin. Capture both files from the same invocation and pass both to ProofScope.
+
+```sh
+PYTHONPATH=/path/to/proofscope python -m pytest -p proofscope_pytest --junitxml results.xml --report-log results.jsonl
+python /path/to/proofscope/proofscope.py --expected expected.txt --results results.xml --pytest-report-log results.jsonl
+```
+
+Use the collected parent cases in `expected.txt`. The stamping plugin records one invocation marker and each full pytest node ID in both files. ProofScope checks those stamps and the parent phases against JUnit, then counts independently identified passing subtests.
+
+The marker checks consistency between artifacts from a trusted test runner. It supplies no authentication, commit binding, or freshness guarantee. An older matching pair can pass. Verify the commit and run separately when using the result as a release gate.
+
+Without `-p proofscope_pytest`, the opt-in comparison reports GAP for missing evidence stamps. Re-run pytest with the plugin and capture both files together.
+
+Use distinct pytest subtest contexts, such as `with subtests.test(msg="tax case", rate="standard"):`. The message and keyword arguments distinguish subtests within the same parent. Duplicate contexts, a truncated log, or a nonpassing outcome keep GAP. Default JUnit-only checks remain strict.
 
 ### The exit code is the verdict
 
