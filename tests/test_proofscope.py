@@ -694,9 +694,9 @@ def test_the_readme_says_we_use_it_on_ourselves():
     assert "1,610 tests" in text
     assert "b193b0a" in text
     assert "pull request 303" in text
-    assert "30 inline-check suites" in text
-    assert "the guards" in text
-    assert "payment-AB" in text
+    assert "30 suites that report their checks inline" in text
+    assert "two configuration checks for the payment and catalogue services" in text
+    assert "buyer tests for invalid request IDs and malformed payment headers" in text
     assert "full test suite" not in text
 
 
